@@ -1,0 +1,20 @@
+A simple plugin for relaying messages to and from an external program running on the same host
+
+
+example configuration;
+LoadPlugin "name..."{
+   PlParam  "BindPort"	"1000" 
+   PlParam  "DestPort"	"1001"
+   PlParam  "MagicNumber" "123"
+}
+ 
+Incoming packets should be preceeded with the following header;
+   u_int8_t magicNumber;
+   u_int8_t ttl;
+ 
+Outgoing packets will be preceeded with the following header;
+   u_int8_t magicNumber;
+   u_int8_t ttl;
+   u_int8_t addr_len; // 4 / 16
+   u_int8_t originator[addr_len];
+  
