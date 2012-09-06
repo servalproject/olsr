@@ -88,7 +88,7 @@ static void relay_packet(unsigned char *buff, int size, int ttl, void *addr, int
     .msg_iovlen=3,
   };
   
-  printf("Relaying message");
+  fprintf(stderr, "Relaying message\n");
   if (sendmsg(udpSocket, &msg, 0)<0){
     perror("Sending packet");
   }
@@ -120,13 +120,13 @@ olsr_parser(union olsr_message *message, struct interface *in_if __attribute__ (
   
   /* Ignore if we sent it */
   if (ipequal(originator, &olsr_cnf->main_addr)){
-    printf("Ignoring message from myself");
+    fprintf(stderr, "Ignoring message from myself\n");
     return false;
   }
   
   /* Ignore if the neighbor is not symmetric. */
   if (check_neighbor_link(ipaddr) != SYM_LINK){
-    printf("Ignoring message from non-peer");
+    fprintf(stderr, "Ignoring message from non-peer\n");
     return false;
   }
   
@@ -184,11 +184,12 @@ olsr_send(unsigned char *buff, int len, int ttl)
     memcpy(&message->v6.message, buff, len);
   }
   
+  fprintf(stderr, "Pushing outgoing payload\n");
+  
   for (ifn = ifnet; ifn; ifn = ifn->int_next) {
     if (net_outbuffer_push(ifn, message, aligned_size) != aligned_size) {
       /* out buffer full, send a packet and try again */
       net_output(ifn);
-      printf("Pushing outgoing payload");
       if (net_outbuffer_push(ifn, message, aligned_size) != aligned_size) {
 	// warn?
       }
@@ -207,18 +208,18 @@ read_socket(int fd, void *data __attribute__ ((unused)), unsigned int flags __at
   
   int msg_len = recvfrom(fd, buff, sizeof(buff), 0, (struct sockaddr *)&addr, &size);
   if (msg_len<3){
-    printf("Received message is only %d bytes long",msg_len);
+    fprintf(stderr, "Received message is only %d bytes long\n",msg_len);
     return;
   }
   
   // drop packets from other port numbers
   if (ntohs(addr.sin_port)!=destPort){
-    printf("Received message came from the wrong port %d",ntohs(addr.sin_port));
+    fprintf(stderr, "Received message came from the wrong port %d\n",ntohs(addr.sin_port));
     return;
   }
   
   if ((magicNumber & 0xFF) != buff[0]){
-    printf("Magic number header doesn't match %d",buff[0]);
+    fprintf(stderr, "Magic number header doesn't match %d\n",buff[0]);
     return;
   }
 
@@ -280,7 +281,7 @@ olsrd_plugin_init(void)
   // tell olsr we want to read data from this socket as soon as it arrives for low latency
   add_olsr_socket(fd, NULL, &read_socket, NULL, SP_IMM_READ);
   
-  printf("Bount socket for relaying packets on ports %d-%d",bindPort,destPort);
+  printf("Bount socket for relaying packets on ports %d-%d\n",bindPort,destPort);
   return 1;
 }
 
