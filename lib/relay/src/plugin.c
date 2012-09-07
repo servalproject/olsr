@@ -102,6 +102,7 @@ olsr_parser(union olsr_message *message, struct interface *in_if __attribute__ (
   int ttl;
   int seqno;
   int size;
+  int padding;
   unsigned char *buff;
   
   if (olsr_cnf->ip_version == AF_INET) {
@@ -129,8 +130,9 @@ olsr_parser(union olsr_message *message, struct interface *in_if __attribute__ (
     fprintf(stderr, "Ignoring message from non-peer\n");
     return false;
   }
-  
-  relay_packet(buff, size, ttl, originator, olsr_cnf->ipsize);
+
+  padding = buff[0];
+  relay_packet(buff +1, size - 1 - padding, ttl, originator, olsr_cnf->ipsize);
   
   // forward the message
   return true;
@@ -144,14 +146,18 @@ olsr_send(unsigned char *buff, int len, int ttl)
   int aligned_size;
   union olsr_message *message = (union olsr_message *)buffer;
   struct interface *ifn;
+  int padding=0;
+  unsigned char *dest;
   
-  aligned_size=len;
+  aligned_size=len+1;
   
   if (olsr_cnf->ip_version == AF_INET) {
     aligned_size+=sizeof(struct olsrmsg) - sizeof(message->v4.message);
     
-    if ((aligned_size % 4))
-      aligned_size += 4 - (aligned_size % 4);
+    if ((aligned_size % 4)){
+      padding = 4 - (aligned_size % 4);
+      aligned_size += padding;
+    }
     
     memset(message, 0, aligned_size);
    
@@ -163,13 +169,15 @@ olsr_send(unsigned char *buff, int len, int ttl)
     message->v4.seqno = htons(get_msg_seqno());
     message->v4.olsr_msgsize = htons(aligned_size);
     
-    memcpy(&message->v4.message, buff, len);
+    dest = (unsigned char *)&message->v4.message;
     
   } else {
     aligned_size+=sizeof(struct olsrmsg6) - sizeof(message->v6.message);
     
-    if ((aligned_size % 4))
-      aligned_size += 4 - (aligned_size % 4);
+    if ((aligned_size % 4)){
+      padding = 4 - (aligned_size % 4);
+      aligned_size += padding;
+    }
     
     memset(message, 0, aligned_size);
     
@@ -181,17 +189,18 @@ olsr_send(unsigned char *buff, int len, int ttl)
     message->v6.seqno = htons(get_msg_seqno());
     message->v6.olsr_msgsize = htons(aligned_size);
     
-    memcpy(&message->v6.message, buff, len);
+    dest = (unsigned char *)&message->v6.message;
   }
   
-  fprintf(stderr, "Pushing outgoing payload\n");
+  dest[0]=padding;
+  memcpy(dest +1, buff, len);
   
   for (ifn = ifnet; ifn; ifn = ifn->int_next) {
     if (net_outbuffer_push(ifn, message, aligned_size) != aligned_size) {
       /* out buffer full, send a packet and try again */
       net_output(ifn);
       if (net_outbuffer_push(ifn, message, aligned_size) != aligned_size) {
-	// warn?
+	fprintf(stderr, "Failed to pushing outgoing payload to interface %s\n", ifn->int_name);
       }
     }
   }
